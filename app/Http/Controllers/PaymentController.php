@@ -5,8 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Payment;
 use App\Models\Transaction;
 use App\Services\UserService;
+use Exception;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
 
 class PaymentController extends Controller
 {
@@ -19,7 +19,7 @@ class PaymentController extends Controller
 
     private function getUserIdFromToken(Request $request)
     {
-        $token = $request->header('Authorization');
+        $token = $request->header('authorization');
         $validation = $this->userService->validateSesion($token);
 
         if (!$validation['success']) {
@@ -32,75 +32,58 @@ class PaymentController extends Controller
 
     public function processPayment(Request $request)
     {
-        //verificar usuario logueado
-        $this->getUserIdFromToken($request);
+        try {
+            // Verificar usuario logueado
+            $this->getUserIdFromToken($request);
 
-        //Validación de los datos del pago
-        $validator = Validator::make($request->all(), [
-            'total_amount' => 'required|numeric|min:0',
-            'payment_method.card_number' => 'required|string',
-            'payment_method.expiry_date' => 'required|date_format:m/y',
-            'payment_method.card_type' => 'required|string|in:MasterCard,Visa',
-            'payment_method.cvv' => 'required|string|min:3|max:4',
-            'payment_method.cardholder_name' => 'required|string'
-        ]);
+            // Crear o recuperar un pago
+            $payment = Payment::firstOrCreate([
+                'card_number' => $request->payment_method['card_number'],
+                'card_holder' => $request->payment_method['card_holder'],
+                'card_type' => $request->payment_method['card_type'],
+                'expiry_date' => $request->payment_method['expiry_date'],
+                'cvv' => $request->payment_method['cvv'],
+                'amount' => $request->total_amount,
+                'status' => 1
+            ]);
 
-        if ($validator->fails()) {
-            return response()->json(['status' => 'error', 'errors' => $validator->errors()], 400);
-        }
+            $paymetId = $payment->id;
+            $amount = $request->total_amount;
+            $cardType = $request->payment_method['card_type'];
 
+            // Calcular el descuento
+            $discountAmount = $this->calculateDiscount($amount, $cardType);
+            $finalAmount = $amount - $discountAmount;
 
-        $cardData = Payment::firstOrCreate(
-            [
-                'card_number' => $request->card_number,
-                'card_holder' => $request->card_holder,
-                'expiry_date' =>  $request->expiry_date,
-                'card_type' =>  $request->card_type,
-                'cvv' =>  $request->cvv,
-                'amount' => $request->amount
-            ]
-        );
-
-        return $cardData;
-
-        // Obtener el monto y el tipo de tarjeta
-        $amount = $request->total_amount;
-        $cardType = $request->payment_method['card_type'];
-
-        // Calcular el descuento según el tipo de tarjeta
-        $discountAmount = $this->calculateDiscount($amount, $cardType);
-        $finalAmount = $amount - $discountAmount;
-
-        // Simulación de la lógica de procesamiento de pago
-        $transactionSuccess = $this->simulatePaymentProcessing($request->payment_method);
-
-        // crear transacción
-        Transaction::create(
-            [
+            // Crear transacción
+            $newTransaction = Transaction::create([
+                'payment_id' => $paymetId,
+                'amount' => $finalAmount,
                 'original_amount' => $amount,
                 'discount_applied' => $discountAmount,
-                'final_amount' => $finalAmount,
                 'status' => 1,
-            ]
-        );
+            ]);
 
-
-        if ($transactionSuccess) {
-            // Respuesta exitosa
-            return response()->json([
-                'status' => 'success',
-                'transaction_id' => uniqid('txn_'), // Generación de un ID único para la transacción
-
-                'message' => 'Pago procesado con éxito'
-            ], 200);
-        } else {
-            // Respuesta de error
+            if ($newTransaction) {
+                return response()->json([
+                    'status' => 'success',
+                    'transaction_id' => uniqid('txn_'),
+                    'message' => 'Pago procesado con éxito',
+                ], 200);
+            } else {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Error al procesar pago',
+                ], 401);
+            }
+        } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
-                'error' => 'Hubo un problema al procesar el pago'
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
+
 
     /**
      * Calcula el descuento basado en el tipo de tarjeta
@@ -115,26 +98,5 @@ class PaymentController extends Controller
             default:
                 return 0;
         }
-    }
-
-    /**
-     * Simula el procesamiento del pago
-     */
-    private function simulatePaymentProcessing($paymentMethod)
-    {
-        $validator = Validator::make($paymentMethod, [
-            'card_number' => 'required|string',
-            'expiry_date' => 'required|date_format:m/y',
-            'card_type' => 'required|string|in:MasterCard,Visa',
-            'cvv' => 'required|string|min:3|max:4',
-            'card_holder' => 'required|string'
-        ]);
-
-        if ($validator->fails()) {
-            return false; // Retorna falso si la validación falla
-        }
-
-        // Lógica simulada de pago
-        return true; // Suponiendo que el pago fue exitoso
     }
 }

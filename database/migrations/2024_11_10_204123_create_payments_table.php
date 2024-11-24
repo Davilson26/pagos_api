@@ -13,11 +13,11 @@ return new class extends Migration
     {
         Schema::create('payments', function (Blueprint $table) {
             $table->id();
-            $table->string('card_number'); // Mejor enmascarado y encriptado
-            $table->string('card_holder'); // Títular de la tarjeta
-            $table->integer('card_type'); // Títular de la tarjeta
-            $table->date('expiry_date');
-            $table->string('cvv'); // Mejor enmascarado y encriptado
+            $table->string('card_number');
+            $table->string('card_holder');
+            $table->string('card_type'); 
+            $table->string('expiry_date');
+            $table->string('cvv');
             $table->decimal('amount', 12, 2);
             $table->integer('status')->default(0);
             $table->timestamps();

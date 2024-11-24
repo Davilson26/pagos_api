@@ -66,7 +66,6 @@ class UserService
             curl_setopt($ch, CURLOPT_HTTPHEADER, [
                 'Content-Type: text/xml',
                 'Content-Length: ' . strlen($xmlRequest),
-                'SOAPAction: http://localhost:8002/LoginSoap.php/ValidarSesion',
             ]);
 
             // Ejecutar la petición SOAP
@@ -87,21 +86,10 @@ class UserService
             // Usar xpath con el prefijo de namespace adecuado
             $responseBody = $xmlResponse->xpath('//ns1:ValidarSesionResponse//return')[0];
 
-            // Extraer los datos de la respuesta
-            $success = (string) $responseBody->success;
-            $message = (string) $responseBody->message;
-            $usuarioId = (string) $responseBody->usuario_id;
-
-            if ($success === 'true') {
-                return [
-                    'success' => true,
-                    'message' => $message,
-                    'usuario_id' => $usuarioId
-                ];
-            }
-
             return [
-                'success' => false
+                'success' => true,
+                'message' => $responseBody->message,
+                'usuario_id' => $responseBody->usuario_id
             ];
         } catch (Exception $e) {
             return [
